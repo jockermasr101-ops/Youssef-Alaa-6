@@ -1,47 +1,40 @@
 rules_version = '2';
-service cloud.firestore {
-  match /databases/{d}/documents {
-    function me() { return request.auth != null; }
-    function ud() { return /databases/$(d)/documents/users/$(request.auth.uid); }
-    function role() { return me() && exists(ud()) ? get(ud()).data.role : ''; }
-    function staff() { return role() in ['owner','admin','staff']; }
-    function adm() { return role() in ['owner','admin']; }
-
-    match /cfg/site { allow read: if true; allow write: if adm(); }
-    match /cfg/owner { allow read: if true; allow create: if me() && request.resource.data.uid == request.auth.uid &&
-        getAfter(/databases/$(d)/documents/users/$(request.auth.uid)).data.role == 'owner'; }
-
-    match /users/{u} {
-      allow read: if me() && (request.auth.uid == u || staff());
-      allow create: if me() && request.auth.uid == u &&
-        (request.resource.data.role == 'client' ||
-         (request.resource.data.role == 'owner' && getAfter(/databases/$(d)/documents/cfg/owner).data.uid == u));
-      allow update: if me() && (
-        (request.auth.uid == u && request.resource.data.role == resource.data.role) ||
-        (role() == 'owner' && request.resource.data.role != 'owner') ||
-        (role() == 'admin' && request.resource.data.role in ['client','staff'] && resource.data.role in ['client','staff']));
-    }
-
-    match /orders/{o} {
-      allow read: if me() && (resource.data.uid == request.auth.uid || staff());
-      allow create: if me() && request.resource.data.uid == request.auth.uid && request.resource.data.st == 0;
-      allow update: if staff() || (me() && resource.data.uid == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pay','msgs','files']));
-      allow delete: if adm();
-    }
-
+// قواعد مقترحة للمرحلة الجاية (Firebase). لازم تتجرّب في Rules Playground قبل النشر.
+service cloud.firestore { match /databases/{db}/documents {
+  function signed() { return request.auth != null; }
+  function role() { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role; }
+  function staff() { return signed() && role() in ['owner','admin','staff']; }
+  function admin() { return signed() && role() in ['owner','admin']; }
+  function owner() { return signed() && role() == 'owner'; }
+  match /config/owner {              // أول واحد بس يقدر يبقى المالك
+    allow read: if signed();
+    allow create: if signed() && request.resource.data.uid == request.auth.uid;
+    allow update: if owner();
+  }
+  match /users/{uid} {
+    allow read: if signed() && (request.auth.uid == uid || staff());
+    allow create: if signed() && request.auth.uid == uid &&
+      (request.resource.data.role == 'client' ||
+       (request.resource.data.role == 'owner' && getAfter(/databases/$(db)/documents/config/owner).data.uid == uid));
+    allow update: if signed() && (
+      (request.auth.uid == uid && request.resource.data.role == resource.data.role) ||
+      owner() ||
+      (admin() && resource.data.role in ['client','staff'] && request.resource.data.role in ['client','staff']));
+  }
+  match /site/{d} { allow read: if true; allow write: if admin(); }
+  match /products/{id} { allow read: if true; allow write: if admin(); }
+  match /content/{id} { allow read: if signed(); allow write: if admin(); }   // نصوص/فيديوهات المنتج المحمية
+  match /orders/{id} {
+    allow create: if signed() && request.resource.data.uid == request.auth.uid;
+    allow read: if signed() && (resource.data.uid == request.auth.uid || staff());
+    allow update, delete: if staff();
     match /msgs/{m} {
-      allow create: if request.resource.data.keys().hasOnly(['name','contact','svc','text','at']) && request.resource.data.text.size() < 2000;
-      allow read, delete: if staff();
-    }
-
-    match /prods/{p}/c/{x} {
-      allow read: if staff() || (me() && exists(/databases/$(d)/documents/access/$(request.auth.uid + '_' + p)));
-      allow write: if adm();
-    }
-    match /access/{a} {
-      allow read: if me() && a.matches(request.auth.uid + '_.*');
-      allow write: if staff();
+      allow read, create: if signed() && (get(/databases/$(db)/documents/orders/$(id)).data.uid == request.auth.uid || staff());
     }
   }
-}
+  match /transfers/{id} {
+    allow create: if signed() && request.resource.data.uid == request.auth.uid && request.resource.data.st == 0;
+    allow read: if signed() && (resource.data.uid == request.auth.uid || staff());
+    allow update: if staff();
+  }
+}}
