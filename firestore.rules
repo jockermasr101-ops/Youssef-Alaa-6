@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{d}/documents {
+    function me() { return request.auth != null; }
+    function ud() { return /databases/$(d)/documents/users/$(request.auth.uid); }
+    function role() { return me() && exists(ud()) ? get(ud()).data.role : ''; }
+    function staff() { return role() in ['owner','admin','staff']; }
+    function adm() { return role() in ['owner','admin']; }
+
+    match /cfg/site { allow read: if true; allow write: if adm(); }
+    match /cfg/owner { allow read: if true; allow create: if me() && request.resource.data.uid == request.auth.uid &&
+        getAfter(/databases/$(d)/documents/users/$(request.auth.uid)).data.role == 'owner'; }
+
+    match /users/{u} {
+      allow read: if me() && (request.auth.uid == u || staff());
+      allow create: if me() && request.auth.uid == u &&
+        (request.resource.data.role == 'client' ||
+         (request.resource.data.role == 'owner' && getAfter(/databases/$(d)/documents/cfg/owner).data.uid == u));
+      allow update: if me() && (
+        (request.auth.uid == u && request.resource.data.role == resource.data.role) ||
+        (role() == 'owner' && request.resource.data.role != 'owner') ||
+        (role() == 'admin' && request.resource.data.role in ['client','staff'] && resource.data.role in ['client','staff']));
+    }
+
+    match /orders/{o} {
+      allow read: if me() && (resource.data.uid == request.auth.uid || staff());
+      allow create: if me() && request.resource.data.uid == request.auth.uid && request.resource.data.st == 0;
+      allow update: if staff() || (me() && resource.data.uid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pay','msgs','files']));
+      allow delete: if adm();
+    }
+
+    match /msgs/{m} {
+      allow create: if request.resource.data.keys().hasOnly(['name','contact','svc','text','at']) && request.resource.data.text.size() < 2000;
+      allow read, delete: if staff();
+    }
+
+    match /prods/{p}/c/{x} {
+      allow read: if staff() || (me() && exists(/databases/$(d)/documents/access/$(request.auth.uid + '_' + p)));
+      allow write: if adm();
+    }
+    match /access/{a} {
+      allow read: if me() && a.matches(request.auth.uid + '_.*');
+      allow write: if staff();
+    }
+  }
+}
