@@ -1,12 +1,14 @@
 rules_version = '2';
-// قواعد مقترحة للمرحلة الجاية (Firebase). لازم تتجرّب في Rules Playground قبل النشر.
+// الصق الملف ده في Firebase Console > Firestore > Rules ثم Publish. جرّبه في Rules Playground.
 service cloud.firestore { match /databases/{db}/documents {
   function signed() { return request.auth != null; }
   function role() { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role; }
-  function staff() { return signed() && role() in ['owner','admin','staff']; }
-  function admin() { return signed() && role() in ['owner','admin']; }
-  function owner() { return signed() && role() == 'owner'; }
-  match /config/owner {              // أول واحد بس يقدر يبقى المالك
+  function staff() { return signed() && exists(/databases/$(db)/documents/users/$(request.auth.uid)) && role() in ['owner','admin','staff']; }
+  function admin() { return signed() && exists(/databases/$(db)/documents/users/$(request.auth.uid)) && role() in ['owner','admin']; }
+  function owner() { return signed() && exists(/databases/$(db)/documents/users/$(request.auth.uid)) && role() == 'owner'; }
+  function onlyMsgs() { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['msgs']); }
+
+  match /config/owner {                       // أول واحد يسجّل بيبقى المالك الوحيد
     allow read: if signed();
     allow create: if signed() && request.resource.data.uid == request.auth.uid;
     allow update: if owner();
@@ -21,20 +23,28 @@ service cloud.firestore { match /databases/{db}/documents {
       owner() ||
       (admin() && resource.data.role in ['client','staff'] && request.resource.data.role in ['client','staff']));
   }
-  match /site/{d} { allow read: if true; allow write: if admin(); }
-  match /products/{id} { allow read: if true; allow write: if admin(); }
-  match /content/{id} { allow read: if signed(); allow write: if admin(); }   // نصوص/فيديوهات المنتج المحمية
+  match /site/main { allow read: if true; allow write: if admin(); }          // محتوى الموقع العام
+  match /site/private { allow read: if signed(); allow write: if admin(); }   // طرق الدفع ومحتوى المنتجات
+  match /leads/{id} {                                                       // الطلب السريع من الزوار
+    allow create: if request.resource.data.keys().hasOnly(['id','name','svc','st','amt','files','info','lead','ts'])
+      && request.resource.data.name is string && request.resource.data.name.size() < 100
+      && request.resource.data.st == 0 && request.resource.data.amt == 0;
+    allow read, update, delete: if staff();
+  }
   match /orders/{id} {
-    allow create: if signed() && request.resource.data.uid == request.auth.uid;
+    allow create: if signed() && (staff() || request.resource.data.uid == request.auth.uid);
     allow read: if signed() && (resource.data.uid == request.auth.uid || staff());
-    allow update, delete: if staff();
-    match /msgs/{m} {
-      allow read, create: if signed() && (get(/databases/$(db)/documents/orders/$(id)).data.uid == request.auth.uid || staff());
-    }
+    allow update: if signed() && (staff() || (resource.data.uid == request.auth.uid && onlyMsgs()));
+    allow delete: if staff();
   }
   match /transfers/{id} {
     allow create: if signed() && request.resource.data.uid == request.auth.uid && request.resource.data.st == 0;
     allow read: if signed() && (resource.data.uid == request.auth.uid || staff());
     allow update: if staff();
+  }
+  match /support/{uid} {
+    allow read: if signed() && (request.auth.uid == uid || staff());
+    allow create: if signed() && request.auth.uid == uid;
+    allow update: if signed() && (request.auth.uid == uid || staff()) && onlyMsgs();
   }
 }}
