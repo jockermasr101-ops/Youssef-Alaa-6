@@ -10,6 +10,8 @@ service cloud.firestore { match /databases/{db}/documents {
 
   match /config/owner {                       // أول واحد يسجّل بيبقى المالك الوحيد
     allow read: if signed();
+    // حماية إضافية (اختيارية لكن مُوصى بيها): بدّل الإيميل بإيميلك والغي علامة التعليق عشان محدش غيرك يقدر يبقى المالك
+    // allow create: if signed() && request.resource.data.uid == request.auth.uid && request.auth.token.email == 'YOUR-EMAIL@gmail.com' && request.auth.token.email_verified == true;
     allow create: if signed() && request.resource.data.uid == request.auth.uid;
     allow update: if owner();
   }
@@ -19,7 +21,7 @@ service cloud.firestore { match /databases/{db}/documents {
       (request.resource.data.role == 'client' ||
        (request.resource.data.role == 'owner' && getAfter(/databases/$(db)/documents/config/owner).data.uid == uid));
     allow update: if signed() && (
-      (request.auth.uid == uid && request.resource.data.role == resource.data.role) ||
+      (request.auth.uid == uid && request.resource.data.role == resource.data.role && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['data','diagAt'])) ||
       owner() ||
       (admin() && resource.data.role in ['client','staff'] && request.resource.data.role in ['client','staff']));
   }
@@ -28,17 +30,18 @@ service cloud.firestore { match /databases/{db}/documents {
   match /leads/{id} {                                                       // الطلب السريع من الزوار
     allow create: if request.resource.data.keys().hasOnly(['id','name','svc','st','amt','files','info','lead','ts'])
       && request.resource.data.name is string && request.resource.data.name.size() < 100
-      && request.resource.data.st == 0 && request.resource.data.amt == 0;
+      && request.resource.data.st == 0 && request.resource.data.amt == 0
+      && request.resource.data.svc is string && request.resource.data.svc.size() < 100 && request.resource.data.info.size() <= 25;
     allow read, update, delete: if staff();
   }
   match /orders/{id} {
-    allow create: if signed() && (staff() || request.resource.data.uid == request.auth.uid);
+    allow create: if signed() && (staff() || (request.resource.data.uid == request.auth.uid && request.resource.data.st == 0 && request.resource.data.amt == 0));
     allow read: if signed() && (resource.data.uid == request.auth.uid || staff());
     allow update: if signed() && (staff() || (resource.data.uid == request.auth.uid && onlyMsgs()));
     allow delete: if staff();
   }
   match /transfers/{id} {
-    allow create: if signed() && request.resource.data.uid == request.auth.uid && request.resource.data.st == 0;
+    allow create: if signed() && request.resource.data.uid == request.auth.uid && request.resource.data.st == 0 && request.resource.data.ref is string;
     allow read: if signed() && (resource.data.uid == request.auth.uid || staff());
     allow update: if staff();
   }

@@ -26,7 +26,15 @@ window.FB={
  addOrder(o){return setDoc(doc(db,o.lead?'leads':'orders',o.id),clean(o)).catch(e=>A.toast('تعذّر الإرسال: '+e.code))},
  saveOrder(o){return updateDoc(doc(db,o.lead?'leads':'orders',o.id),{st:o.st,amt:o.amt||0}).catch(e=>A.toast('تعذّر الحفظ: '+e.code))},
  delOrder(o){return deleteDoc(doc(db,o.lead?'leads':'orders',o.id)).catch(e=>A.toast('تعذّر الحذف: '+e.code))},
- msg(k,m){const u=cur();if(k==='support')return setDoc(doc(db,'support',u.uid),{uid:u.uid,email:u.email,msgs:arrayUnion(m)},{merge:true});if(k.startsWith('support:'))return updateDoc(doc(db,'support',k.slice(8)),{msgs:arrayUnion(m)});return updateDoc(doc(db,'orders',k),{msgs:arrayUnion(m)})},
+ msg(k,m){const u=cur();if(!u){A.toast('سجّل دخول الأول');return}const p=k==='support'?setDoc(doc(db,'support',u.uid),{uid:u.uid,email:u.email,msgs:arrayUnion(m)},{merge:true}):k.startsWith('support:')?updateDoc(doc(db,'support',k.slice(8)),{msgs:arrayUnion(m)}):updateDoc(doc(db,'orders',k),{msgs:arrayUnion(m)});return p.catch(e=>A.toast('تعذّر إرسال الرسالة: '+e.code))},
+ async diag(){const R=[],t=async(n,f)=>{try{R.push([n,1,(await f())||'تمام'])}catch(e){R.push([n,0,String(e.code||e.message||'خطأ')])}};
+ await t('تسجيل الدخول',async()=>{if(!cur())throw{code:'مش مسجّل دخول'};return cur().email});
+ await t('قراءة محتوى الموقع',async()=>{await getDoc(doc(db,'site','main'))});
+ await t('قراءة بيانات حسابك',async()=>{const s=await getDoc(doc(db,'users',cur().uid));if(!s.exists())throw{code:'مفيش ملف شخصي'};return 'الصلاحية: '+s.data().role});
+ await t('قراءة الإعدادات الخاصة',async()=>{await getDoc(doc(db,'site','private'))});
+ await t('الكتابة في حسابك',async()=>{await updateDoc(doc(db,'users',cur().uid),{diagAt:Date.now()})});
+ await t('رفع ملف على Cloudinary',async()=>{const f=new FormData();f.append('file','data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');f.append('upload_preset',PRESET);const r=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/auto/upload`,{method:'POST',body:f}),x=await r.json();if(!x.secure_url)throw{code:x.error&&x.error.message||'فشل'}});
+ return R},
  async upload(file){const f=new FormData();f.append('file',file);f.append('upload_preset',PRESET);const r=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/auto/upload`,{method:'POST',body:f}),j=await r.json();if(!j.secure_url)throw new Error(j.error&&j.error.message||'فشل الرفع');return j.secure_url},
  async addTransfer(t,file){try{if(file)t.rc=await this.upload(file);await setDoc(doc(db,'transfers',t.id),clean(t))}catch(e){A.toast('تعذّر إرسال التحويل: '+(e.code||e.message))}},
  saveTransfer(t){return updateDoc(doc(db,'transfers',t.id),{st:t.st}).catch(e=>A.toast('تعذّر الحفظ: '+e.code))},
