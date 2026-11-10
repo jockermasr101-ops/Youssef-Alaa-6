@@ -2,7 +2,9 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/13.2.0/firebase-
 import {getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,signOut} from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
 import {getFirestore,doc,getDoc,setDoc,updateDoc,deleteDoc,collection,query,where,onSnapshot,runTransaction,arrayUnion} from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
 // إعدادات Firebase عامة بطبيعتها. الحماية الحقيقية من firestore.rules
+const APPCHECK_KEY="";  // ضع مفتاح reCAPTCHA v3 هنا بعد ما تفعّل App Check (راجع README)
 const app=initializeApp({apiKey:"AIzaSyA4AMdIdb4El8laeNTSEaeNh7PYob023u4",authDomain:"youssef-101.firebaseapp.com",projectId:"youssef-101",storageBucket:"youssef-101.firebasestorage.app",messagingSenderId:"663356705913",appId:"1:663356705913:web:36b8f50aa09bafa50f98a8"});
+if(APPCHECK_KEY){const ac=await import("https://www.gstatic.com/firebasejs/13.2.0/firebase-app-check.js");ac.initializeAppCheck(app,{provider:new ac.ReCaptchaV3Provider(APPCHECK_KEY),isTokenAutoRefreshEnabled:true})}
 const auth=getAuth(app),db=getFirestore(app),A=window.APP,CLOUD="vohjq4fi",PRESET="zzr8q6oz";
 const clean=o=>JSON.parse(JSON.stringify(o)),STAFF=['owner','admin','staff'];
 let unsubs=[],tm,last='';
