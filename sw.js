@@ -1,4 +1,4 @@
-const V='v1';
+const V='v2';
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(['manifest.json','icon-192.png'])));self.skipWaiting()});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==V).map(x=>caches.delete(x))))));
 self.addEventListener('fetch',e=>{const r=e.request,u=new URL(r.url);if(r.method!=='GET'||u.origin!==location.origin)return;

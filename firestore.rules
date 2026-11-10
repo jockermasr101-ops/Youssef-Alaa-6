@@ -38,7 +38,7 @@ service cloud.firestore { match /databases/{db}/documents {
     allow read, update, delete: if staff();
   }
   match /orders/{id} {
-    allow create: if signed() && (staff() || (request.resource.data.uid == request.auth.uid && request.resource.data.st == 0 && request.resource.data.amt == 0));
+    allow create: if signed() && (staff() || (request.resource.data.uid == request.auth.uid && request.resource.data.st == 0 && request.resource.data.amt == 0 && request.resource.data.msgs.size() == 0));
     allow read: if signed() && (resource.data.uid == request.auth.uid || staff());
     allow update: if signed() && (staff() || (resource.data.uid == request.auth.uid && onlyMsgs() && goodClientMsg()));
     allow delete: if staff();
